@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: matchdev
+      POSTGRES_USER: matchdev
+      POSTGRES_PASSWORD: matchdev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matchdev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DATABASE_URL: jdbc:postgresql://postgres:5432/matchdev
+      DATABASE_USERNAME: matchdev
+      DATABASE_PASSWORD: matchdev
+      JWT_SECRET: matchdev-docker-secret-key-with-more-than-32-characters
+      RESUME_PARSER_URL: http://resume-parser:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      resume-parser:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+  resume-parser:
+    build: ./resume-parser
+    environment:
+      MAX_PDF_SIZE_BYTES: 5242880
+      MAX_PDF_PAGES: 30
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
